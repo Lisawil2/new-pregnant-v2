@@ -1,135 +1,190 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
 
-class TrackerScreen extends StatelessWidget {
+class TrackerScreen extends StatefulWidget {
   const TrackerScreen({super.key});
 
-  // Let's assume total pregnancy weeks = 40
-  final int currentWeek = 20;
+  @override
+  State<TrackerScreen> createState() => _TrackerScreenState();
+}
+
+class _TrackerScreenState extends State<TrackerScreen> {
+  DateTime? _selectedDate;
+  int? _currentWeek;
+  late SharedPreferences _prefs;
+
+  List<String> tips = [
+    "Start taking prenatal vitamins with folic acid.",
+    "Focus on a healthy diet and hydration.",
+    "Avoid alcohol, smoking, and caffeine.",
+    "Schedule your first prenatal check-up.",
+    "Manage nausea with small, frequent meals.",
+    "Stay active with light exercise like walking.",
+    "Get plenty of rest and manage stress.",
+    "Start documenting your pregnancy journey.",
+    "Consider joining a prenatal class or group.",
+    "Monitor your weight gain with your doctor.",
+    "Eat iron-rich foods to support your blood supply.",
+    "Start doing pelvic floor (Kegel) exercises.",
+    "Watch for common symptoms like dizziness.",
+    "Make time for mental health and mindfulness.",
+    "Discuss genetic testing options with your provider.",
+    "Start using belly-safe moisturizers to reduce itching.",
+    "Learn about fetal development this trimester.",
+    "Start planning maternity leave early.",
+    "Review pregnancy-safe medications with your doctor.",
+    "Connect with your support network.",
+    "You’re halfway there! Celebrate small milestones.",
+    "Feel your baby’s first movements (quickening).",
+    "Begin a registry or list for baby essentials.",
+    "Keep track of your blood pressure & symptoms.",
+    "Take time to relax—stress can affect the baby.",
+    "Consider prenatal yoga or guided meditation.",
+    "Practice sleeping on your left side.",
+    "Prepare your home for baby’s arrival.",
+    "Start researching birthing options and hospitals.",
+    "Maintain regular prenatal check-ups.",
+    "Think about birth plans and write questions.",
+    "Pack your hospital bag essentials.",
+    "Install the car seat and have it checked.",
+    "Learn about signs of preterm labor.",
+    "Discuss postpartum support with loved ones.",
+    "Get your partner involved in birth prep.",
+    "Stock up on postpartum supplies early.",
+    "Limit travel as due date approaches.",
+    "Create a list of important contacts.",
+    "Your baby could arrive any day now!",
+    "Stay calm and trust your body—you’re ready.",
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedDate();
+  }
+
+  Future<void> _loadSavedDate() async {
+    _prefs = await SharedPreferences.getInstance();
+    String? savedDate = _prefs.getString('startDate');
+    if (savedDate != null) {
+      _selectedDate = DateTime.parse(savedDate);
+      _currentWeek = _calculatePregnancyWeek(_selectedDate!);
+      setState(() {});
+    }
+  }
+
+  Future<void> _pickStartDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(Duration(days: 7)),
+      firstDate: DateTime.now().subtract(Duration(days: 300)),
+      lastDate: DateTime.now(),
+    );
+
+    if (picked != null) {
+      await _prefs.setString('startDate', picked.toIso8601String());
+      setState(() {
+        _selectedDate = picked;
+        _currentWeek = _calculatePregnancyWeek(picked);
+      });
+    }
+  }
+
+  int _calculatePregnancyWeek(DateTime startDate) {
+    final now = DateTime.now();
+    final difference = now.difference(startDate).inDays;
+    return (difference / 7).ceil().clamp(1, 40);
+  }
 
   @override
   Widget build(BuildContext context) {
-    double progress = currentWeek / 40;
-
     return Scaffold(
       backgroundColor: Colors.pink.shade50,
       appBar: AppBar(
-        title: const Text(
-          "Pregnancy Tracker",
-          style: TextStyle(color: Colors.white),
-        ),
+        title: Text("Pregnancy Tracker"),
         backgroundColor: Colors.pink.shade400,
-        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.edit_calendar),
+            onPressed: _pickStartDate,
+            tooltip: "Edit Start Date",
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+      body: Padding(
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Pregnancy Week Info
-            Center(
-              child: Text(
-                "You're in Week $currentWeek 🎉",
-                style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.pink.shade700),
-              ),
+            Text(
+              "Track Your Pregnancy Progress",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.pink.shade700),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 16),
 
-            // Progress bar
-            LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.pink.shade100,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.pink),
-              minHeight: 10,
-            ),
-            const SizedBox(height: 8),
-            Text("${(progress * 100).toStringAsFixed(1)}% completed",
-                textAlign: TextAlign.center),
-
-            const SizedBox(height: 30),
-
-            // Baby Size Info
-            _buildCard(
-              title: "Baby’s Size 🍌",
-              content: "Your baby is about the size of a banana and measures around 6.5 inches. Their hearing is developing, and they might even respond to your voice.",
-              image: 'assets/images/baby1.jpg',
-            ),
-
-            const SizedBox(height: 20),
-
-            // Mom’s Body Changes
-            _buildCard(
-              title: "Your Body 🤰",
-              content: "You may notice increased appetite, stretch marks, or changes in skin tone. Continue eating a balanced diet and stay hydrated.",
-              icon: Icons.female,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Health Tips
-            _buildCard(
-              title: "Health Tips 💡",
-              content: "• Take your prenatal vitamins.\n• Stay active with light exercises.\n• Sleep on your side for better circulation.\n• Drink plenty of water.",
-              icon: Icons.favorite,
-            ),
-
-            const SizedBox(height: 30),
-
-            // Back to Home Button
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context); // returns to previous screen (e.g., home)
-                },
-                icon: const Icon(Icons.home),
-                label: const Text("Back to Home"),
+            if (_selectedDate == null)
+              ElevatedButton.icon(
+                onPressed: _pickStartDate,
+                icon: Icon(Icons.calendar_today),
+                label: Text("Select Start Date (LMP)"),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.pink.shade400,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  textStyle:
-                      const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  backgroundColor: Colors.pink,
+                  foregroundColor: Colors.white,
                 ),
               ),
-            )
+
+            if (_selectedDate != null) ...[
+              SizedBox(height: 16),
+              _buildWeekInfoCard(),
+              SizedBox(height: 20),
+              _buildTipOfWeek(),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCard({
-    required String title,
-    required String content,
-    IconData? icon,
-    String? image,
-  }) {
+  Widget _buildWeekInfoCard() {
+    int daysLeft = max(0, 280 - (_currentWeek! * 7));
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 5,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              "You're in Week $_currentWeek",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.pink.shade800),
+            ),
+            SizedBox(height: 8),
+            Text("Expected due in $daysLeft days."),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTipOfWeek() {
+    String tip = tips[(_currentWeek! - 1).clamp(0, tips.length - 1)];
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
         child: Row(
           children: [
-            if (icon != null)
-              Icon(icon, color: Colors.pink, size: 40)
-            else if (image != null)
-              Image.asset(image, height: 50),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style:
-                          const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text(content,
-                      style: const TextStyle(fontSize: 14, color: Colors.black87)),
-                ],
-              ),
-            )
+            Icon(Icons.lightbulb, color: Colors.orange),
+            SizedBox(width: 10),
+            Expanded(child: Text("Tip of the Week: $tip")),
           ],
         ),
       ),
