@@ -18,10 +18,45 @@ dev_dependencies:
   flutter_lints: ^5.0.0
 flutter:
   uses-material-design: true
-
   assets:
-    - assets/images/
-
-
-
- 
+    - assets/image/
+    # - assets/image/week1.jpg
+    # - assets/image/week2.jpg
+    # - assets/image/week3.jpg
+    # - assets/image/week4.jpg
+    # - assets/image/week5.jpg
+    # - assets/image/week6.jpg
+    # - assets/image/week7.jpg
+    # - assets/image/week8.jpg
+    # - assets/image/week9.jpg
+    # - assets/image/week10.jpg
+    # - assets/image/week11.jpg
+    # - assets/image/week12.jpg
+    # - assets/image/week13.jpg
+    # - assets/image/week14.jpg
+    # - assets/image/week15.jpg
+    # - assets/image/week16.jpg
+    # - assets/image/week17.jpg
+    # - assets/image/week18.jpg
+    # - assets/image/week19.jpg
+    # - assets/image/week20.jpg
+    # - assets/image/week21.jpg
+    # - assets/image/week22.jpg
+    # - assets/image/week23.jpg
+    # - assets/image/week24.jpg
+    # - assets/image/week25.jpg
+    # - assets/image/week26.jpg
+    # - assets/image/week27.jpg  
+    # - assets/image/week28.jpg
+    # - assets/image/week29.jpg
+    # - assets/image/week30.jpg
+    # - assets/image/week31.jpg
+    # - assets/image/week32.jpg
+    # - assets/image/week33.jpg
+    # - assets/image/week34.jpg
+    # - assets/image/week35.jpg
+    # - assets/image/week36.jpg
+    # - assets/image/week37.jpg
+    # - assets/image/week38.jpg
+    # - assets/image/week39.jpg
+    # - assets/image/week40.jpg
