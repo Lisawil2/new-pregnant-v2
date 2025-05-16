@@ -19,7 +19,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/image/
+    - assets/images/
+    - assets/weekimage/
     # - assets/image/week1.jpg
     # - assets/image/week2.jpg
     # - assets/image/week3.jpg

@@ -4,6 +4,7 @@ import 'chat_screen.dart';
 import 'profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
+  const MainScreen({Key? key}) : super(key: key);
   @override
   _MainScreenState createState() => _MainScreenState();
 }

@@ -13,6 +13,8 @@ void main() {
 }
 
 class BloomMamaApp extends StatelessWidget {
+  const BloomMamaApp({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
