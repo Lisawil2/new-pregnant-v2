@@ -8,9 +8,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  http: ^1.4.0  
   intl: ^0.18.1
-  shared_preferences: ^2.2.2  
+  provider: ^6.0.5
+  uuid: ^3.0.7 
+  flutter_dotenv: ^5.1.0  # For storing API keys securely 
   cupertino_icons: ^1.0.8
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -19,6 +23,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - .env 
     - assets/images/
     - assets/weekimage/
     # - assets/image/week1.jpg

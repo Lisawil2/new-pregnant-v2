@@ -1,47 +1,42 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import '../constants/colors.dart';
+import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
   @override
-  SplashScreenState createState() => SplashScreenState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
     Timer(Duration(seconds: 3), () {
-      Navigator.pushReplacementNamed(context, '/onboarding');
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => OnboardingScreen()),
+      );
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.pink.shade50,
+      backgroundColor: AppColors.primaryPink,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset(
-              'assets/images/pregwoman7.jpg', // Your app logo
-              height: 300,
-            ),
+            Icon(Icons.pregnant_woman, size: 100, color: Colors.white),
             SizedBox(height: 20),
             Text(
-              'BloomMama',
+              "BloomMama",
               style: TextStyle(
                 fontSize: 32,
+                color: Colors.white,
                 fontWeight: FontWeight.bold,
-                color: Colors.pink.shade800,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Your companion for a healthy pregnancy',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade700,
               ),
             ),
           ],
