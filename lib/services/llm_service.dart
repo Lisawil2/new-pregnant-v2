@@ -5,7 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class LlmService {
   final String? apiKey;
 
-  LlmService() : apiKey = dotenv.env['API_KEY'] {
+  LlmService() : apiKey = dotenv.env['DEEPSEEK_API_KEY'] {
     if (!dotenv.isInitialized) {
       throw Exception('DotEnv not initialized. Ensure dotenv.load() is called before creating LlmService.');
     }
