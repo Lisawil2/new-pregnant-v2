@@ -11,8 +11,20 @@ android {
     ndkVersion = "27.0.12077973"
 
     compileOptions {
+        // Enable core library desugaring
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+
+        // Other configurations
+    defaultConfig {
+        applicationId = "com.example.pregnancy_chatbot"
+        minSdk = 21 // Ensure this is at least 21 for flutter_local_notifications
+        targetSdk = 34 // Target Android 14 for latest compatibility
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        }
+
     }
 
     kotlinOptions {
@@ -20,10 +32,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.pregnancy_chatbot"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -41,4 +50,8 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

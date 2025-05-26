@@ -15,6 +15,9 @@ dependencies:
   flutter_dotenv: ^5.1.0  # For storing API keys securely 
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.3.0
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.10.1
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
@@ -26,43 +29,43 @@ flutter:
     - .env 
     - assets/images/
     - assets/weekimage/
-    # - assets/image/week1.jpg
-    # - assets/image/week2.jpg
-    # - assets/image/week3.jpg
-    # - assets/image/week4.jpg
-    # - assets/image/week5.jpg
-    # - assets/image/week6.jpg
-    # - assets/image/week7.jpg
-    # - assets/image/week8.jpg
-    # - assets/image/week9.jpg
-    # - assets/image/week10.jpg
-    # - assets/image/week11.jpg
-    # - assets/image/week12.jpg
-    # - assets/image/week13.jpg
-    # - assets/image/week14.jpg
-    # - assets/image/week15.jpg
-    # - assets/image/week16.jpg
-    # - assets/image/week17.jpg
-    # - assets/image/week18.jpg
-    # - assets/image/week19.jpg
-    # - assets/image/week20.jpg
-    # - assets/image/week21.jpg
-    # - assets/image/week22.jpg
-    # - assets/image/week23.jpg
-    # - assets/image/week24.jpg
-    # - assets/image/week25.jpg
-    # - assets/image/week26.jpg
-    # - assets/image/week27.jpg  
-    # - assets/image/week28.jpg
-    # - assets/image/week29.jpg
-    # - assets/image/week30.jpg
-    # - assets/image/week31.jpg
-    # - assets/image/week32.jpg
-    # - assets/image/week33.jpg
-    # - assets/image/week34.jpg
-    # - assets/image/week35.jpg
-    # - assets/image/week36.jpg
-    # - assets/image/week37.jpg
-    # - assets/image/week38.jpg
-    # - assets/image/week39.jpg
-    # - assets/image/week40.jpg
+    - assets/weekimage/week-1.jpg
+    - assets/weekimage/week-2.jpg
+    - assets/weekimage/week-3.jpg
+    - assets/weekimage/week-4.jpg
+    - assets/weekimage/week-5.jpg
+    - assets/weekimage/week-6.jpg
+    - assets/weekimage/week-7.jpg
+    - assets/weekimage/week-8.jpg
+    - assets/weekimage/week-9.jpg
+    - assets/weekimage/week-10.jpg
+    - assets/weekimage/week-11.jpg
+    - assets/weekimage/week-12.jpg
+    - assets/weekimage/week-13.jpg
+    - assets/weekimage/week-14.jpg
+    - assets/weekimage/week-15.jpg
+    - assets/weekimage/week-16.jpg
+    - assets/weekimage/week-17.jpg
+    - assets/weekimage/week-18.jpg
+    - assets/weekimage/week-19.jpg
+    - assets/weekimage/week-20.jpg
+    - assets/weekimage/week-21.jpg
+    - assets/weekimage/week-22.jpg
+    - assets/weekimage/week-23.jpg
+    - assets/weekimage/week-24.jpg
+    - assets/weekimage/week-25.jpg
+    - assets/weekimage/week-26.jpg
+    - assets/weekimage/week-27.jpg  
+    - assets/weekimage/week-28.jpg
+    - assets/weekimage/week-29.jpg
+    - assets/weekimage/week-30.jpg
+    - assets/weekimage/week-31.jpg
+    - assets/weekimage/week-32.jpg
+    - assets/weekimage/week-33.jpg
+    - assets/weekimage/week-34.jpg
+    - assets/weekimage/week-35.jpg
+    - assets/weekimage/week-36.jpg
+    - assets/weekimage/week-37.jpg
+    - assets/weekimage/week-38.jpg
+    - assets/weekimage/week-39.jpg
+    - assets/weekimage/week-40.jpg

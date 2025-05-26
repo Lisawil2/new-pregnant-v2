@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
+import 'pregnancy_data.dart';
 
 class TrackerScreen extends StatefulWidget {
-  const TrackerScreen({super.key});
+  final int? initialWeek;
+
+  const TrackerScreen({super.key, this.initialWeek});
 
   @override
   State<TrackerScreen> createState() => _TrackerScreenState();
@@ -14,7 +17,7 @@ class _TrackerScreenState extends State<TrackerScreen> {
   int? _currentWeek;
   late SharedPreferences _prefs;
 
-  // Existing tips (renamed to generalTips for clarity)
+  // General Tips
   List<String> generalTips = [
     "Start taking prenatal vitamins with folic acid.",
     "Focus on a healthy diet and hydration.",
@@ -149,95 +152,6 @@ class _TrackerScreenState extends State<TrackerScreen> {
     "Exercise safely with professional guidance.",
   ];
 
-  // Baby Development Information
-  List<String> babyDevelopment = [
-    "Your baby is a tiny cluster of cells.",
-    "The heart begins to form and beat.",
-    "Arm and leg buds start to appear.",
-    "Eyes and ears are forming.",
-    "The neural tube closes, forming the spine.",
-    "Facial features start to develop.",
-    "Your baby is about the size of a grape.",
-    "Fingers and toes begin to form.",
-    "Major organs are developing rapidly.",
-    "Your baby can move, though you can’t feel it.",
-    "Hair follicles start to form.",
-    "Your baby is about the size of a plum.",
-    "The digestive system is developing.",
-    "Your baby can suck their thumb.",
-    "Bones are beginning to harden.",
-    "Your baby is about the size of an avocado.",
-    "The heartbeat is audible via ultrasound.",
-    "Your baby can make facial expressions.",
-    "The kidneys start functioning.",
-    "Your baby is about the size of a mango.",
-    "You may feel baby’s first movements.",
-    "The lungs are developing rapidly.",
-    "Your baby can hear your voice.",
-    "Your baby is about the size of a banana.",
-    "Fat layers begin to form under the skin.",
-    "The eyes can open and close.",
-    "Your baby is about the size of an ear of corn.",
-    "The brain is growing rapidly.",
-    "Your baby can grasp and respond to touch.",
-    "The immune system is strengthening.",
-    "Your baby is about the size of a cauliflower.",
-    "Hair and nails continue to grow.",
-    "Your baby practices breathing movements.",
-    "The nervous system is maturing.",
-    "Your baby is about the size of a coconut.",
-    "The body is preparing for birth.",
-    "Your baby is gaining weight quickly.",
-    "The lungs are nearly fully developed.",
-    "Your baby is about the size of a pineapple.",
-    "Your baby is ready for the outside world!",
-    "Your baby is fully developed for birth.",
-  ];
-
-  // Image paths for each week
-  Map<int, String> babyDevelopmentImages = {
-    1: 'assets/weekimage/week1.jpg',
-    2: 'assets/weekimage/week2.jpg',
-    3: 'assets/weekimage/week3.jpg',
-    4: 'assets/weekimage/week4.jpg',
-    5: 'assets/weekimage/week5.jpg',
-    6: 'assets/weekimage/week6.jpg',
-    7: 'assets/weekimage/week7.jpg',
-    8: 'assets/weekimage/week8.jpg',
-    9: 'assets/weekimage/week9.jpg',
-    10: 'assets/weekimage/week10.jpg',
-    11: 'assets/weekimage/week11.jpg',
-    12: 'assets/weekimage/week12.jpg',
-    13: 'assets/weekimage/week13.jpg',
-    14: 'assets/weekimage/week14.jpg',
-    15: 'assets/weekimage/week15.jpg',
-    16: 'assets/weekimage/week16.jpg',
-    17: 'assets/weekimage/week17.jpg',
-    18: 'assets/weekimage/week18.jpg',
-    19: 'assets/weekimage/week19.jpg',
-    20: 'assets/weekimage/week20.jpg',
-    21: 'assets/weekimage/week21.jpg',
-    22: 'assets/weekimage/week22.jpg',
-    23: 'assets/weekimage/week23.jpg',
-    24: 'assets/weekimage/week24.jpg',
-    25: 'assets/weekimage/week25.jpg',
-    26: 'assets/weekimage/week26.jpg',
-    27: 'assets/weekimage/year27.jpg',
-    28: 'assets/weekimage/week28.jpg',
-    29: 'assets/weekimage/week29.jpg',
-    30: 'assets/weekimage/week30.jpg',
-    31: 'assets/weekimage/week31.jpg',
-    32: 'assets/weekimage/week32.jpg',
-    33: 'assets/weekimage/week33.jpg',
-    34: 'assets/weekimage/week34.jpg',
-    35: 'assets/weekimage/week35.jpg',
-    36: 'assets/weekimage/week36.jpg',
-    37: 'assets/weekimage/week37.jpg',
-    38: 'assets/weekimage/week38.jpg',
-    39: 'assets/weekimage/week39.jpg',
-    40: 'assets/image/week40.jpg',
-  };
-
   // Weekly Pregnancy Updates
   List<String> weeklyUpdates = [
     "Embryo is implanting in the uterus.",
@@ -294,7 +208,7 @@ class _TrackerScreenState extends State<TrackerScreen> {
     String? savedDate = _prefs.getString('startDate');
     if (savedDate != null) {
       _selectedDate = DateTime.parse(savedDate);
-      _currentWeek = _calculatePregnancyWeek(_selectedDate!);
+      _currentWeek = widget.initialWeek ?? _calculatePregnancyWeek(_selectedDate!);
       setState(() {});
     }
   }
@@ -302,8 +216,8 @@ class _TrackerScreenState extends State<TrackerScreen> {
   Future<void> _pickStartDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().subtract(Duration(days: 7)),
-      firstDate: DateTime.now().subtract(Duration(days: 300)),
+      initialDate: DateTime.now().subtract(const Duration(days: 7)),
+      firstDate: DateTime.now().subtract(const Duration(days: 300)),
       lastDate: DateTime.now(),
     );
 
@@ -333,23 +247,23 @@ class _TrackerScreenState extends State<TrackerScreen> {
     return Scaffold(
       backgroundColor: Colors.pink.shade50,
       appBar: AppBar(
-        title: Text("Pregnancy Tracker"),
+        title: const Text("Pregnancy Tracker"),
         backgroundColor: Colors.pink.shade400,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context), // Changed to pop
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.edit_calendar),
+            icon: const Icon(Icons.edit_calendar),
             onPressed: _pickStartDate,
             tooltip: "Edit Start Date",
           ),
         ],
       ),
       body: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -358,13 +272,13 @@ class _TrackerScreenState extends State<TrackerScreen> {
                 "Track Your Pregnancy Progress",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.pink.shade700),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
 
               if (_selectedDate == null)
                 ElevatedButton.icon(
                   onPressed: _pickStartDate,
-                  icon: Icon(Icons.calendar_today),
-                  label: Text("Select Start Date (LMP)"),
+                  icon: const Icon(Icons.calendar_today),
+                  label: const Text("Select Start Date (LMP)"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.pink,
                     foregroundColor: Colors.white,
@@ -372,17 +286,17 @@ class _TrackerScreenState extends State<TrackerScreen> {
                 ),
 
               if (_selectedDate != null) ...[
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 _buildWeekInfoCard(),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 _buildTipOfWeek(),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 _buildNutritionTip(),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 _buildExerciseGuidance(),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 _buildBabyDevelopment(),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 _buildWeeklyUpdate(),
               ],
             ],
@@ -399,14 +313,14 @@ class _TrackerScreenState extends State<TrackerScreen> {
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             Text(
               "You're in Week $_currentWeek",
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.pink.shade800),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text("Expected due in $daysLeft days."),
           ],
         ),
@@ -420,11 +334,11 @@ class _TrackerScreenState extends State<TrackerScreen> {
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
-        title: Text("General Tip of the Week"),
-        leading: Icon(Icons.lightbulb, color: Colors.orange),
+        title: const Text("General Tip of the Week"),
+        leading: const Icon(Icons.lightbulb, color: Colors.orange),
         children: [
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Text(tip),
           ),
         ],
@@ -438,11 +352,11 @@ class _TrackerScreenState extends State<TrackerScreen> {
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
-        title: Text("Nutrition Tip of the Week"),
-        leading: Icon(Icons.food_bank, color: Colors.green),
+        title: const Text("Nutrition Tip of the Week"),
+        leading: const Icon(Icons.food_bank, color: Colors.green),
         children: [
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Text(tip),
           ),
         ],
@@ -456,11 +370,11 @@ class _TrackerScreenState extends State<TrackerScreen> {
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
-        title: Text("Exercise Guidance"),
-        leading: Icon(Icons.fitness_center, color: Colors.blue),
+        title: const Text("Exercise Guidance"),
+        leading: const Icon(Icons.fitness_center, color: Colors.blue),
         children: [
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Text(tip),
           ),
         ],
@@ -469,49 +383,41 @@ class _TrackerScreenState extends State<TrackerScreen> {
   }
 
   Widget _buildBabyDevelopment() {
-    String info = babyDevelopment[(_currentWeek! - 1).clamp(0, babyDevelopment.length - 1)];
+    final data = PregnancyData.getDataForWeek(_currentWeek!);
     String trimester = _getTrimester(_currentWeek!);
-    String? imagePath = babyDevelopmentImages[_currentWeek];
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
         title: Text("Baby Development - $trimester"),
-        leading: Icon(Icons.child_care, color: Colors.purple),
+        leading: const Icon(Icons.child_care, color: Colors.purple),
         children: [
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (imagePath != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      imagePath,
-                      height: 150,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        height: 150,
-                        color: Colors.grey.shade200,
-                        child: Center(child: Text('Image not found')),
-                      ),
-                    ),
-                  )
-                else
-                  Container(
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    data.imagePath,
                     height: 150,
-                    color: Colors.grey.shade200,
-                    child: Center(child: Text('No image available')),
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 150,
+                      color: Colors.grey.shade200,
+                      child: const Center(child: Text('Image not found')),
+                    ),
                   ),
-                SizedBox(height: 12),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   'Week $_currentWeek Development:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                SizedBox(height: 8),
-                Text(info),
+                const SizedBox(height: 8),
+                Text(data.development),
               ],
             ),
           ),
@@ -526,11 +432,11 @@ class _TrackerScreenState extends State<TrackerScreen> {
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
-        title: Text("Weekly Pregnancy Update"),
-        leading: Icon(Icons.update, color: Colors.teal),
+        title: const Text("Weekly Pregnancy Update"),
+        leading: const Icon(Icons.update, color: Colors.teal),
         children: [
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Text(update),
           ),
         ],
