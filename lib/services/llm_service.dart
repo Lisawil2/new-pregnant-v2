@@ -22,7 +22,7 @@ class LlmService {
         throw Exception('API_KEY not configured. Please check your .env file.');
       }
 
-      const String endpoint = 'https://api.openai.com/v1/chat/completions';
+      const String endpoint = 'https://api.deepseek.com/chat/completions';
 
       final response = await http.post(
         Uri.parse(endpoint),
@@ -31,7 +31,7 @@ class LlmService {
           'Authorization': 'Bearer $apiKey',
         },
         body: jsonEncode({
-          "model": "gpt-3.5-turbo",
+          "model": "deepseek-reasoner",
           "messages": [
             {
               "role": "system",
