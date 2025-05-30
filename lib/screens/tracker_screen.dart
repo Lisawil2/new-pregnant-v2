@@ -250,15 +250,11 @@ class _TrackerScreenState extends State<TrackerScreen> {
         title: const Text("Pregnancy Tracker"),
         backgroundColor: Colors.pink.shade400,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context), // Changed to pop
-        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_calendar),
             onPressed: _pickStartDate,
-            tooltip: "Edit Start Date",
+            tooltip: "Select Last Menstrual Period (LMP)",
           ),
         ],
       ),
@@ -274,16 +270,37 @@ class _TrackerScreenState extends State<TrackerScreen> {
               ),
               const SizedBox(height: 16),
 
-              if (_selectedDate == null)
-                ElevatedButton.icon(
-                  onPressed: _pickStartDate,
-                  icon: const Icon(Icons.calendar_today),
-                  label: const Text("Select Start Date (LMP)"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.pink,
-                    foregroundColor: Colors.white,
+              if (_selectedDate == null) ...[
+                Tooltip(
+                  message: 'Select the first day of your last menstrual period to track progress',
+                  decoration: BoxDecoration(
+                    color: Colors.pink.shade400,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  textStyle: const TextStyle(color: Colors.white),
+                  child: ElevatedButton.icon(
+                    onPressed: _pickStartDate,
+                    icon: const Icon(Icons.calendar_today),
+                    label: const Text("Select Start Date (LMP)"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.pink,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  'Choose the first day of your last menstrual period (LMP) to calculate your pregnancy week and due date.',
+                  style: TextStyle(fontSize: 14, color: Colors.pink.shade600),
+                ),
+              ],
 
               if (_selectedDate != null) ...[
                 const SizedBox(height: 16),
@@ -374,7 +391,7 @@ class _TrackerScreenState extends State<TrackerScreen> {
         leading: const Icon(Icons.fitness_center, color: Colors.blue),
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(16),
             child: Text(tip),
           ),
         ],

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/animation.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -33,17 +35,24 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   List<Reminder> reminders = [];
-  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  final fln.FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
+      fln.FlutterLocalNotificationsPlugin();
   int? _currentWeek;
   late SharedPreferences _prefs;
+  bool _showHints = false; // Track if hints should be shown
+  final _animationController = AnimationController(
+    duration: const Duration(milliseconds: 500),
+    vsync: NoopTickerProvider(),
+  );
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
     tz.initializeTimeZones();
     _initializeNotifications();
-    _loadSavedDate();
+    _loadSavedData();
+    _initializeAnimation();
     // Add sample reminders for testing
     reminders.addAll([
       Reminder(
@@ -56,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
         id: '2',
         title: 'Iron Supplement',
         description: 'Take daily iron supplement',
-        dateTime: DateTime(2025, 5, 26, 17, 15), // 05:15 PM EAT for testing
+        dateTime: DateTime(2025, 5, 26, 17, 15),
       ),
     ]);
     // Schedule notifications for existing reminders
@@ -65,15 +74,30 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Load saved start date and calculate week
-  Future<void> _loadSavedDate() async {
+  // Initialize animation for interactive elements
+  void _initializeAnimation() {
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _animationController.repeat(reverse: true);
+  }
+
+  // Load saved start date and check for first-time hints
+  Future<void> _loadSavedData() async {
     _prefs = await SharedPreferences.getInstance();
     String? savedDate = _prefs.getString('startDate');
+    bool? hintsShown = _prefs.getBool('hintsShown');
     if (savedDate != null) {
       final startDate = DateTime.parse(savedDate);
       setState(() {
         _currentWeek = _calculatePregnancyWeek(startDate);
       });
+    }
+    if (hintsShown == null || !hintsShown) {
+      setState(() {
+        _showHints = true;
+      });
+      await _prefs.setBool('hintsShown', true);
     }
   }
 
@@ -86,9 +110,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // Initialize notifications
   Future<void> _initializeNotifications() async {
     const initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initializationSettingsIOS = DarwinInitializationSettings();
-    const initializationSettings = InitializationSettings(
+        fln.AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initializationSettingsIOS = fln.DarwinInitializationSettings();
+    const initializationSettings = fln.InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: initializationSettingsIOS,
     );
@@ -124,15 +148,15 @@ class _HomeScreenState extends State<HomeScreen> {
   // Schedule a notification for a reminder
   Future<void> _scheduleNotification(Reminder reminder) async {
     bool canScheduleExact = await _requestExactAlarmPermission();
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = fln.AndroidNotificationDetails(
       'reminder_channel',
       'Reminders',
       channelDescription: 'Notifications for upcoming reminders',
-      importance: Importance.max,
-      priority: Priority.high,
+      importance: fln.Importance.max,
+      priority: fln.Priority.high,
     );
-    const iosDetails = DarwinNotificationDetails();
-    const platformDetails = NotificationDetails(
+    const iosDetails = fln.DarwinNotificationDetails();
+    final platformDetails = fln.NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
@@ -145,9 +169,9 @@ class _HomeScreenState extends State<HomeScreen> {
           reminder.description,
           tz.TZDateTime.from(reminder.dateTime, tz.local),
           platformDetails,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
+              fln.UILocalNotificationDateInterpretation.absoluteTime,
         );
       } else {
         await _flutterLocalNotificationsPlugin.show(
@@ -287,12 +311,36 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.pink.shade400,
         elevation: 0,
       ),
-      body: _screens[_selectedIndex],
+      body: Stack(
+        children: [
+          _screens[_selectedIndex],
+          if (_showHints)
+            _buildHintOverlay(), // Show hints for first-time users
+        ],
+      ),
       floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton(
-              onPressed: _showAddReminderDialog,
-              backgroundColor: Colors.pink.shade400,
-              child: const Icon(Icons.add, color: Colors.white),
+          ? Tooltip(
+              message: 'Add a new reminder for appointments or tasks',
+              decoration: BoxDecoration(
+                color: Colors.pink.shade400,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              textStyle: const TextStyle(color: Colors.white),
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                child: FloatingActionButton(
+                  onPressed: _showAddReminderDialog,
+                  backgroundColor: Colors.pink.shade400,
+                  child: const Icon(Icons.add, color: Colors.white),
+                ),
+              ),
             )
           : null,
       bottomNavigationBar: BottomNavigationBar(
@@ -304,20 +352,117 @@ class _HomeScreenState extends State<HomeScreen> {
             _selectedIndex = index;
           });
         },
-        items: const [
+        items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home),
+            icon: Tooltip(
+              message: 'View your pregnancy progress and reminders',
+              decoration: BoxDecoration(
+                color: Colors.pink.shade400,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              textStyle: const TextStyle(color: Colors.white),
+              child: const Icon(Icons.home),
+            ),
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.pregnant_woman),
+            icon: Tooltip(
+              message: 'Track your baby’s development week by week',
+              decoration: BoxDecoration(
+                color: Colors.pink.shade400,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              textStyle: const TextStyle(color: Colors.white),
+              child: const Icon(Icons.pregnant_woman),
+            ),
             label: 'Tracker',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
+            icon: Tooltip(
+              message: 'Chat with AI for pregnancy advice',
+              decoration: BoxDecoration(
+                color: Colors.pink.shade400,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              textStyle: const TextStyle(color: Colors.white),
+              child: const Icon(Icons.chat),
+            ),
             label: 'Chat',
           ),
         ],
+      ),
+    );
+  }
+
+  // Build hint overlay for first-time users
+  Widget _buildHintOverlay() {
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _showHints = false;
+          });
+        },
+        child: Container(
+          color: Colors.black.withOpacity(0.5),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Welcome to BloomMama!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Tap the pink button to add reminders\nor explore baby updates below.',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _showHints = false;
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pink.shade400,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('Got it!', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -326,6 +471,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final pregnancyData = _currentWeek != null
         ? PregnancyData.getDataForWeek(_currentWeek!)
         : PregnancyData.getDataForWeek(20); // Fallback to Week 20
+
+    // Debug log for image loading
+    debugPrint('Attempting to load image: ${pregnancyData.imagePath}');
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -340,40 +488,74 @@ class _HomeScreenState extends State<HomeScreen> {
                 fontWeight: FontWeight.bold,
                 color: Colors.pink.shade800),
           ),
+          const SizedBox(height: 8),
+          Text(
+            "Your pregnancy journey at a glance",
+            style: TextStyle(fontSize: 16, color: Colors.pink.shade600),
+          ),
           const SizedBox(height: 16),
 
           // Baby Development Card
-          const Text(
-            "This Week's Baby Update 👶",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            "Your Baby’s Progress This Week 👶",
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.pink.shade800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Tap to track your baby’s growth",
+            style: TextStyle(fontSize: 14, color: Colors.pink.shade600),
           ),
           const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () {
-              Navigator.pushNamed(context, '/tracker',
-                  arguments: {'initialWeek': _currentWeek});
-            },
-            child: Card(
-              elevation: 5,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: ListTile(
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.asset(
-                    pregnancyData.imagePath,
-                    width: 60,
-                    height: 60,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.child_care,
-                      size: 60,
-                      color: Colors.pink,
+          Tooltip(
+            message: 'Tap to see detailed baby development info',
+            decoration: BoxDecoration(
+              color: Colors.pink.shade400,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            textStyle: const TextStyle(color: Colors.white),
+            child: ScaleTransition(
+              scale: _scaleAnimation,
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.pushNamed(context, '/tracker',
+                      arguments: {'initialWeek': _currentWeek});
+                },
+                child: Card(
+                  elevation: 5,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.asset(
+                        pregnancyData.imagePath,
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          debugPrint('Image load error: $error');
+                          return const Icon(
+                            Icons.child_care,
+                            size: 60,
+                            color: Colors.pink,
+                          );
+                        },
+                      ),
                     ),
+                    title: Text("Week ${pregnancyData.week} - ${pregnancyData.size}"),
+                    subtitle: Text(pregnancyData.development),
+                    trailing: const Icon(Icons.arrow_forward_ios, color: Colors.pink),
                   ),
                 ),
-                title: Text("Week ${pregnancyData.week} - ${pregnancyData.size}"),
-                subtitle: Text(pregnancyData.development),
-                trailing: const Icon(Icons.arrow_forward_ios, color: Colors.pink),
               ),
             ),
           ),
@@ -384,15 +566,48 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                "Upcoming Reminders 📅",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Your Upcoming Tasks 📅",
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.pink.shade800),
+                  ),
+                  Text(
+                    "Manage your reminders here",
+                    style: TextStyle(fontSize: 14, color: Colors.pink.shade600),
+                  ),
+                ],
               ),
-              TextButton(
-                onPressed: _showAddReminderDialog,
-                child: Text(
-                  'Add Reminder',
-                  style: TextStyle(color: Colors.pink.shade400),
+              Tooltip(
+                message: 'Set a new reminder for your pregnancy needs',
+                decoration: BoxDecoration(
+                  color: Colors.pink.shade400,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                textStyle: const TextStyle(color: Colors.white),
+                child: ElevatedButton(
+                  onPressed: _showAddReminderDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pink.shade400,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Add Reminder',
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
             ],
@@ -427,4 +642,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+}
+
+// Dummy TickerProvider for animation (since vsync requires a StatefulWidget with TickerProviderStateMixin)
+class NoopTickerProvider implements TickerProvider {
+  @override
+  Ticker createTicker(TickerCallback onTick) => Ticker(onTick);
 }

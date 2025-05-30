@@ -69,10 +69,14 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/splash',
       routes: {
+        '/': (context) => const HomeScreen(), // Fallback for root route
         '/splash': (context) => const SplashScreen(),
         '/onboarding': (context) => const OnboardingScreen(),
         '/home': (context) => const HomeScreen(),
-        '/tracker': (context) => const TrackerScreen(),
+        '/tracker': (context) => TrackerScreen(
+              initialWeek: (ModalRoute.of(context)?.settings.arguments
+                      as Map<String, dynamic>?)?['initialWeek'] as int?,
+            ),
         '/chat': (context) => const ChatScreen(),
       },
       onGenerateRoute: (settings) {
