@@ -125,22 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (status.isGranted) {
       return true;
     } else {
-      if (status.isPermanentlyDenied) {
-        await openAppSettings();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Please enable "Alarms & Reminders" in system settings for exact timing.'),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Exact alarms not permitted. Please allow in app permissions.'),
-          ),
-        );
-      }
+      // Removed the SnackBar error messages here
       return false;
     }
   }
@@ -182,9 +167,8 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error scheduling notification: $e')),
-      );
+      // Removed the SnackBar error message here - errors are now handled silently
+      debugPrint('Notification scheduling error: $e');
     }
   }
 
@@ -300,17 +284,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.pink.shade50,
       appBar: AppBar(
+        automaticallyImplyLeading: false, // This removes the back button
         title: Text(
           _selectedIndex == 0
               ? "BloomMama"
               : _selectedIndex == 1
                   ? "Tracker"
                   : "Chat",
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+             fontWeight: FontWeight.bold,
+             fontSize: 28),
+          
         ),
+        centerTitle: true,
         backgroundColor: Colors.pink.shade400,
         elevation: 0,
       ),
+    
       body: Stack(
         children: [
           _screens[_selectedIndex],
@@ -374,7 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           BottomNavigationBarItem(
             icon: Tooltip(
-              message: 'Track your baby’s development week by week',
+              message: "Track your baby's development week by week",
               decoration: BoxDecoration(
                 color: Colors.pink.shade400,
                 borderRadius: BorderRadius.circular(8),
@@ -497,7 +488,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Baby Development Card
           Text(
-            "Your Baby’s Progress This Week 👶",
+            "Your Baby's Progress This Week 👶",
             style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -505,7 +496,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            "Tap to track your baby’s growth",
+            "Tap to track your baby's growth",
             style: TextStyle(fontSize: 14, color: Colors.pink.shade600),
           ),
           const SizedBox(height: 10),

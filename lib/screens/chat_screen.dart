@@ -13,12 +13,127 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final Map<int, bool> _expandedMessages = {}; // Track expanded state for each message
 
   @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  // Function to parse simple markdown and return styled text spans
+  List<TextSpan> _parseMarkdownText(String text, Color textColor) {
+    final List<TextSpan> spans = [];
+    final lines = text.split('\n');
+    
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      
+      // Handle headers
+      if (line.startsWith('### ')) {
+        spans.add(TextSpan(
+          text: line.substring(4) + '\n',
+          style: TextStyle(
+            color: textColor,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            height: 1.4,
+          ),
+        ));
+      } else if (line.startsWith('## ')) {
+        spans.add(TextSpan(
+          text: line.substring(3) + '\n',
+          style: TextStyle(
+            color: textColor,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            height: 1.4,
+          ),
+        ));
+      } else if (line.startsWith('# ')) {
+        spans.add(TextSpan(
+          text: line.substring(2) + '\n',
+          style: TextStyle(
+            color: textColor,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            height: 1.4,
+          ),
+        ));
+      } else {
+        // Handle bold text within regular lines
+        final processedLine = _processBoldText(line, textColor);
+        spans.addAll(processedLine);
+        if (i < lines.length - 1) {
+          spans.add(TextSpan(
+            text: '\n',
+            style: TextStyle(color: textColor),
+          ));
+        }
+      }
+    }
+    
+    return spans;
+  }
+
+  List<TextSpan> _processBoldText(String text, Color textColor) {
+    final List<TextSpan> spans = [];
+    final RegExp boldRegex = RegExp(r'\*\*(.*?)\*\*');
+    int lastEnd = 0;
+
+    for (final match in boldRegex.allMatches(text)) {
+      // Add text before the bold part
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: text.substring(lastEnd, match.start),
+          style: TextStyle(
+            color: textColor,
+            fontSize: 16,
+            height: 1.4,
+          ),
+        ));
+      }
+
+      // Add the bold text
+      spans.add(TextSpan(
+        text: match.group(1),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          height: 1.4,
+        ),
+      ));
+
+      lastEnd = match.end;
+    }
+
+    // Add remaining text
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastEnd),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 16,
+          height: 1.4,
+        ),
+      ));
+    }
+
+    // If no bold text was found, return the original text
+    if (spans.isEmpty) {
+      spans.add(TextSpan(
+        text: text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 16,
+          height: 1.4,
+        ),
+      ));
+    }
+
+    return spans;
   }
 
   @override
@@ -84,7 +199,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: provider.messages.length,
                   itemBuilder: (context, index) {
                     final message = provider.messages[index];
-                    return _buildMessageBubble(context, message);
+                    return _buildMessageBubble(context, message, index);
                   },
                 ),
               ),
@@ -128,31 +243,80 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(BuildContext context, ChatMessage message) {
+  Widget _buildMessageBubble(BuildContext context, ChatMessage message, int index) {
     final isUser = message.role == MessageRole.user;
+    final isExpanded = _expandedMessages[index] ?? false;
+    final shouldShowMore = !isUser && message.text.length > 500;
+    
+    // For long messages, show truncated version when collapsed
+    String displayText = message.text;
+    if (!isUser && shouldShowMore && !isExpanded) {
+      displayText = message.text.substring(0, 500) + '...';
+    }
+
+    final textColor = isUser ? Colors.white : Colors.black87;
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
           color: isUser ? Colors.pink[300] : Colors.grey[200],
           borderRadius: BorderRadius.circular(18),
         ),
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 100),
-          child: SingleChildScrollView(
-            child: Text(
-              message.text,
-              style: TextStyle(
-                color: isUser ? Colors.white : Colors.black87,
-                fontSize: 16,
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
+          minHeight: 50,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isUser)
+              // For user messages, use simple text
+              Text(
+                displayText,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 16,
+                  height: 1.4,
+                ),
+                softWrap: true,
+              )
+            else
+              // For AI messages, use styled text with markdown parsing
+              RichText(
+                text: TextSpan(
+                  children: _parseMarkdownText(displayText, textColor),
+                ),
+                softWrap: true,
               ),
-              softWrap: true,
-            ),
-          ),
+            if (shouldShowMore) ...[
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _expandedMessages[index] = !isExpanded;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.pink[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    isExpanded ? 'Show less' : 'More...',
+                    style: TextStyle(
+                      color: Colors.pink[700],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
