@@ -7,9 +7,27 @@ import 'providers/chat_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/tracker_screen.dart';
 import 'screens/chat_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart'; // This file should define DefaultFirebaseOptions
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase safely - check if already initialized
+  if (Firebase.apps.isEmpty) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      print('Firebase initialized successfully.');
+    } catch (e) {
+      print('Firebase initialization error: $e');
+      // Continue without Firebase for now
+    }
+  } else {
+    print('Firebase already initialized.');
+  }
+
   bool dotEnvInitialized = false;
 
   try {
