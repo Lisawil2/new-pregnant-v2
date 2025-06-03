@@ -8,60 +8,70 @@ import 'screens/splash_screen.dart';
 import 'screens/tracker_screen.dart';
 import 'screens/chat_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart'; // This file should define DefaultFirebaseOptions
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase safely - check if already initialized
+  // Initialize Firebase
+  bool firebaseInitialized = false;
   if (Firebase.apps.isEmpty) {
     try {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      print('Firebase initialized successfully.');
-    } catch (e) {
-      print('Firebase initialization error: $e');
-      // Continue without Firebase for now
+      debugPrint('Firebase initialized successfully.');
+      firebaseInitialized = true;
+    } catch (e, stackTrace) {
+      debugPrint('Firebase initialization error: $e\n$stackTrace');
     }
   } else {
-    print('Firebase already initialized.');
+    debugPrint('Firebase already initialized.');
+    firebaseInitialized = true;
   }
 
+  // Initialize DotEnv
   bool dotEnvInitialized = false;
-
   try {
     await dotenv.load(fileName: ".env");
-    if (dotenv.env['API_KEY']?.isNotEmpty ?? false) {
+    if (dotenv.env['DEEPSEEK_API_KEY']?.isNotEmpty ?? false) {
       dotEnvInitialized = true;
-      print('DotEnv initialized successfully.');
+      debugPrint('DotEnv initialized successfully.');
     } else {
-      print('Warning: API_KEY is missing or empty in .env file.');
+      debugPrint('Warning: API_KEY is missing or empty in .env file.');
     }
   } catch (e, stackTrace) {
-    print('Error loading DotEnv: $e\n$stackTrace');
+    debugPrint('Error loading DotEnv: $e\n$stackTrace');
   }
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider(dotEnvInitialized: dotEnvInitialized, firebaseInitialized: firebaseInitialized)),
       ],
-      child: MyApp(dotEnvInitialized: dotEnvInitialized),
+      child: MyApp(
+        dotEnvInitialized: dotEnvInitialized,
+        firebaseInitialized: firebaseInitialized,
+      ),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
   final bool dotEnvInitialized;
+  final bool firebaseInitialized;
 
-  const MyApp({super.key, required this.dotEnvInitialized});
+  const MyApp({
+    super.key,
+    required this.dotEnvInitialized,
+    required this.firebaseInitialized,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Pregnancy Chatbot',
+      title: 'BloomMama',
       theme: ThemeData(
         primarySwatch: Colors.pink,
         colorScheme: ColorScheme.fromSwatch(
@@ -87,7 +97,7 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/splash',
       routes: {
-        '/': (context) => const HomeScreen(), // Fallback for root route
+        '/': (context) => const HomeScreen(),
         '/splash': (context) => const SplashScreen(),
         '/onboarding': (context) => const OnboardingScreen(),
         '/home': (context) => const HomeScreen(),
