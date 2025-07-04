@@ -1,8 +1,6 @@
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/animation.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:pregnancy_chatbot/utils/device_id.dart' as device_utils;
@@ -10,10 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/scheduler.dart';
 import 'tracker_screen.dart';
 import 'chat_screen.dart';
 import 'pregnancy_data.dart';
-import 'device_id.dart'; // Save getDeviceId in a separate file
+import 'device_id.dart';
 
 class Reminder {
   final String id;
@@ -59,8 +58,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final fln.FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
       fln.FlutterLocalNotificationsPlugin();
   int? _currentWeek;
+  DateTime? _lmpDate;
+  DateTime? _dueDate;
   late SharedPreferences _prefs;
   bool _showHints = false;
+  bool _hasSetLMP = false;
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
   late FirebaseFirestore _firestore;
@@ -70,13 +72,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     tz.initializeTimeZones();
-    _firestore = FirebaseFirestore.instance;
-    // Connect to emulator for testing
-    _firestore.settings = const Settings(
-      host: 'localhost:8080',
-      sslEnabled: false,
-      persistenceEnabled: false,
-    );
+    _firestore = FirebaseFirestore.instance; // Use global Firestore instance
     _initializeNotifications();
     _initializeAnimation();
     _loadSavedData();
@@ -96,27 +92,269 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _loadSavedData() async {
     _prefs = await SharedPreferences.getInstance();
     _deviceId = await device_utils.getDeviceId();
-    String? savedDate = _prefs.getString('startDate');
-    bool? hintsShown = _prefs.getBool('hintsShown');
-    if (savedDate != null) {
-      final startDate = DateTime.parse(savedDate);
+
+    String? savedLMP = _prefs.getString('lmpDate');
+    String? savedStartDate = _prefs.getString('startDate');
+    String? savedDueDate = _prefs.getString('dueDate');
+
+    if (savedLMP != null) {
+      _lmpDate = DateTime.parse(savedLMP);
+      _hasSetLMP = true;
+    }
+
+    if (savedStartDate != null) {
+      final startDate = DateTime.parse(savedStartDate);
+      setState(() {
+        _currentWeek = _calculatePregnancyWeek(startDate);
+      });
+    } else if (_lmpDate != null) {
+      final startDate = _lmpDate!.add(const Duration(days: 14));
+      await _prefs.setString('startDate', startDate.toIso8601String());
       setState(() {
         _currentWeek = _calculatePregnancyWeek(startDate);
       });
     }
-    if (hintsShown == null || !hintsShown) {
+
+    if (savedDueDate != null) {
+      _dueDate = DateTime.parse(savedDueDate);
+    } else if (_lmpDate != null) {
+      _dueDate = _lmpDate!.add(const Duration(days: 280));
+      await _prefs.setString('dueDate', _dueDate!.toIso8601String());
+    }
+
+    bool? hintsShown = _prefs.getBool('hintsShown');
+    if ((hintsShown == null || !hintsShown) && _hasSetLMP) {
       setState(() {
         _showHints = true;
       });
       await _prefs.setBool('hintsShown', true);
     }
+
     await _loadReminders();
+    setState(() {});
   }
 
   int _calculatePregnancyWeek(DateTime startDate) {
     final now = DateTime.now();
     final difference = now.difference(startDate).inDays;
     return (difference / 7).ceil().clamp(1, 40);
+  }
+
+  Future<void> _showLMPSelectionDialog() async {
+    DateTime selectedLMP = DateTime.now().subtract(const Duration(days: 30));
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text(
+            'Welcome to BloomMama!',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.pink,
+            ),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'To provide you with accurate pregnancy tracking, please select the first day of your last menstrual period (LMP):',
+                  style: TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 20),
+                Center(
+                  child: Column(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: selectedLMP,
+                            firstDate: DateTime.now().subtract(const Duration(days: 300)),
+                            lastDate: DateTime.now(),
+                            helpText: 'Select Last Menstrual Period',
+                          );
+                          if (pickedDate != null) {
+                            setDialogState(() {
+                              selectedLMP = pickedDate;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.calendar_today),
+                        label: const Text('Select LMP Date'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.pink.shade400,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.pink.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.pink.shade200),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Selected LMP:',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.pink.shade600,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '${selectedLMP.day}/${selectedLMP.month}/${selectedLMP.year}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                _lmpDate = selectedLMP;
+                _dueDate = selectedLMP.add(const Duration(days: 280));
+                final startDate = selectedLMP.add(const Duration(days: 14));
+
+                await _prefs.setString('lmpDate', selectedLMP.toIso8601String());
+                await _prefs.setString('dueDate', _dueDate!.toIso8601String());
+                await _prefs.setString('startDate', startDate.toIso8601String());
+
+                try {
+                  debugPrint('Attempting to save LMP data to Firestore');
+                  await _firestore
+                      .collection('users')
+                      .doc(_deviceId)
+                      .set({
+                    'lmpDate': Timestamp.fromDate(selectedLMP),
+                    'dueDate': Timestamp.fromDate(_dueDate!),
+                    'startDate': Timestamp.fromDate(startDate),
+                    'updatedAt': Timestamp.now(),
+                  }, SetOptions(merge: true));
+                  debugPrint('LMP data saved to Firestore');
+                } catch (e, stackTrace) {
+                  debugPrint('Error saving to Firestore: $e\n$stackTrace');
+                }
+
+                setState(() {
+                  _hasSetLMP = true;
+                  _currentWeek = _calculatePregnancyWeek(startDate);
+                  _showHints = true;
+                });
+
+                Navigator.pop(context);
+                _showCongratulationsDialog();
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.pink.shade400,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+              child: const Text(
+                'Continue',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCongratulationsDialog() async {
+    final weeksLeft = 40 - (_currentWeek ?? 1);
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          '🎉 Congratulations!',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.pink,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Your pregnancy journey begins!',
+              style: TextStyle(fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.pink.shade50,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'You are currently in week ${_currentWeek ?? 1}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Due Date: ${_dueDate?.day}/${_dueDate?.month}/${_dueDate?.year}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.pink.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Approximately $weeksLeft weeks to go!',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.pink.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _prefs.setBool('hintsShown', true);
+              setState(() {
+                _showHints = true;
+              });
+            },
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.pink.shade400,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Start Journey'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _initializeNotifications() async {
@@ -162,6 +400,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           uiLocalNotificationDateInterpretation:
               fln.UILocalNotificationDateInterpretation.absoluteTime,
         );
+        debugPrint('Notification scheduled for reminder: ${reminder.title}');
       } else {
         await _flutterLocalNotificationsPlugin.show(
           reminder.id.hashCode,
@@ -169,15 +408,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           'Exact timing not available: ${reminder.description}',
           platformDetails,
         );
+        debugPrint('Fallback notification shown for reminder: ${reminder.title}');
       }
-    } catch (e) {
-      debugPrint('Notification scheduling error: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Notification scheduling error: $e\n$stackTrace');
     }
   }
 
   Future<void> _loadReminders() async {
     try {
-      // Load from Firestore
+      debugPrint('Loading reminders from Firestore for device: $_deviceId');
       final snapshot = await _firestore
           .collection('users')
           .doc(_deviceId)
@@ -189,8 +429,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             .map((doc) => Reminder.fromJson(doc.data(), doc.id))
             .toList();
       });
+      debugPrint('Loaded ${reminders.length} reminders from Firestore');
 
-      // Load from SharedPreferences as fallback
       final storedReminders = _prefs.getStringList('reminders') ?? [];
       if (reminders.isEmpty && storedReminders.isNotEmpty) {
         setState(() {
@@ -205,14 +445,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             );
           }).toList();
         });
+        debugPrint('Loaded ${reminders.length} reminders from SharedPreferences');
       }
 
-      // Schedule notifications for loaded reminders
       for (var reminder in reminders) {
-        _scheduleNotification(reminder);
+        await _scheduleNotification(reminder);
       }
-    } catch (e) {
-      debugPrint('Error loading reminders: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Error loading reminders: $e\n$stackTrace');
     }
   }
 
@@ -298,14 +538,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   );
 
                   try {
-                    // Save to Firestore
+                    debugPrint('Attempting to save reminder to Firestore');
                     final docRef = await _firestore
                         .collection('users')
                         .doc(_deviceId)
                         .collection('reminders')
                         .add(newReminder.toJson());
+                    debugPrint('Reminder saved to Firestore with ID: ${docRef.id}');
 
-                    // Update local list
                     setState(() {
                       reminders.add(Reminder(
                         id: docRef.id,
@@ -316,18 +556,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ));
                     });
 
-                    // Save to SharedPreferences
                     final storedReminders = _prefs.getStringList('reminders') ?? [];
                     storedReminders.add(
                       '${newReminder.title}|${newReminder.description}|${newReminder.dateTime.toIso8601String()}',
                     );
                     await _prefs.setStringList('reminders', storedReminders);
+                    debugPrint('Reminder saved to SharedPreferences');
 
-                    // Schedule notification
                     await _scheduleNotification(newReminder);
+                    debugPrint('Notification scheduled for reminder: ${newReminder.title}');
 
                     Navigator.pop(context);
-                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Reminder added successfully')),
+                    );
+                  } catch (e, stackTrace) {
+                    debugPrint('Error saving reminder: $e\n$stackTrace');
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Error saving reminder: $e')),
                     );
@@ -348,11 +592,79 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  void _handleTabSelection(int index) {
+    if (index == 1 && !_hasSetLMP) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _showLMPSelectionDialog().then((_) {
+          if (_hasSetLMP) {
+            setState(() {
+              _selectedIndex = 1;
+            });
+          }
+        });
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
   List<Widget> get _screens => [
         _buildMainHomeTab(),
-        TrackerScreen(initialWeek: _currentWeek),
+        _hasSetLMP ? TrackerScreen(initialWeek: _currentWeek) : _buildLMPRequiredScreen(),
         const ChatScreen(),
       ];
+
+  Widget _buildLMPRequiredScreen() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.pregnant_woman,
+              size: 80,
+              color: Colors.pink.shade300,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Welcome to Pregnancy Tracker',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.pink.shade800,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'To start tracking your pregnancy journey, please set your Last Menstrual Period (LMP) first.',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.pink.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: _showLMPSelectionDialog,
+              icon: const Icon(Icons.calendar_today),
+              label: const Text('Set LMP Date'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.pink.shade400,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -375,14 +687,37 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         centerTitle: true,
         backgroundColor: Colors.pink.shade400,
         elevation: 0,
+        actions: _hasSetLMP && _selectedIndex == 0
+            ? [
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit_lmp') {
+                      _showLMPSelectionDialog();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit_lmp',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_calendar),
+                          SizedBox(width: 8),
+                          Text('Edit LMP Date'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ]
+            : null,
       ),
       body: Stack(
         children: [
           _screens[_selectedIndex],
-          if (_showHints) _buildHintOverlay(),
+          if (_showHints && _hasSetLMP) _buildHintOverlay(),
         ],
       ),
-      floatingActionButton: _selectedIndex == 0
+      floatingActionButton: _selectedIndex == 0 && _hasSetLMP
           ? Tooltip(
               message: 'Add a new reminder for appointments or tasks',
               decoration: BoxDecoration(
@@ -411,11 +746,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         currentIndex: _selectedIndex,
         selectedItemColor: Colors.pink,
         unselectedItemColor: Colors.grey,
-        onTap: (int index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: _handleTabSelection,
         items: [
           BottomNavigationBarItem(
             icon: Tooltip(
@@ -438,7 +769,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           BottomNavigationBarItem(
             icon: Tooltip(
-              message: "Track your baby's development week by week",
+              message: _hasSetLMP
+                  ? "Track your baby's development week by week"
+                  : "Set LMP first to access tracker",
               decoration: BoxDecoration(
                 color: Colors.pink.shade400,
                 borderRadius: BorderRadius.circular(8),
@@ -451,7 +784,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ],
               ),
               textStyle: const TextStyle(color: Colors.white),
-              child: const Icon(Icons.pregnant_woman),
+              child: Icon(
+                Icons.pregnant_woman,
+                color: _hasSetLMP ? null : Colors.grey.shade400,
+              ),
             ),
             label: 'Tracker',
           ),
@@ -531,6 +867,94 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildMainHomeTab() {
+    if (!_hasSetLMP) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.favorite,
+                size: 80,
+                color: Colors.pink.shade300,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Welcome to BloomMama!',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.pink.shade800,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Your pregnancy journey companion',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.pink.shade600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.pink.shade100,
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Let\'s Get Started!',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.pink.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'To provide you with accurate pregnancy tracking, we need to know your Last Menstrual Period (LMP) date.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.pink.shade600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: _showLMPSelectionDialog,
+                      icon: const Icon(Icons.calendar_today),
+                      label: const Text('Set LMP Date'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.pink.shade400,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final pregnancyData = _currentWeek != null
         ? PregnancyData.getDataForWeek(_currentWeek!)
         : PregnancyData.getDataForWeek(20);
@@ -542,17 +966,58 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Hello, Mama! 👋",
-            style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.pink.shade800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Your pregnancy journey at a glance",
-            style: TextStyle(fontSize: 16, color: Colors.pink.shade600),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Hello, Mama! 👋",
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.pink.shade800),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Your pregnancy journey at a glance",
+                      style: TextStyle(fontSize: 16, color: Colors.pink.shade600),
+                    ),
+                  ],
+                ),
+              ),
+              if (_dueDate != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.pink.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.pink.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Due Date',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.pink.shade600,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${_dueDate!.day}/${_dueDate!.month}/${_dueDate!.year}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.pink.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 16),
           Text(
@@ -586,8 +1051,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               scale: _scaleAnimation,
               child: GestureDetector(
                 onTap: () {
-                  Navigator.pushNamed(context, '/tracker',
-                      arguments: {'initialWeek': _currentWeek});
+                  setState(() {
+                    _selectedIndex = 1;
+                  });
                 },
                 child: Card(
                   elevation: 5,
@@ -601,7 +1067,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         height: 60,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
-                          debugPrint('Image load error: $e');
+                          debugPrint('Image load error: $error');
                           return const Icon(
                             Icons.child_care,
                             size: 60,
@@ -685,28 +1151,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () async {
                             try {
-                              // Delete from Firestore
+                              debugPrint('Attempting to delete reminder: ${reminder.id}');
                               await _firestore
                                   .collection('users')
                                   .doc(_deviceId)
                                   .collection('reminders')
                                   .doc(reminder.id)
                                   .delete();
+                              debugPrint('Reminder deleted from Firestore');
 
-                              // Delete from SharedPreferences
                               final storedReminders = _prefs.getStringList('reminders') ?? [];
                               storedReminders.removeWhere((r) =>
                                   r.startsWith('${reminder.title}|${reminder.description}|'));
                               await _prefs.setStringList('reminders', storedReminders);
+                              debugPrint('Reminder deleted from SharedPreferences');
 
-                              // Cancel notification
                               await _flutterLocalNotificationsPlugin.cancel(reminder.id.hashCode);
+                              debugPrint('Notification cancelled for reminder: ${reminder.title}');
 
-                              // Update local list
                               setState(() {
                                 reminders.remove(reminder);
                               });
-                            } catch (e) {
+                            } catch (e, stackTrace) {
+                              debugPrint('Error deleting reminder: $e\n$stackTrace');
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text('Error deleting reminder: $e')),
                               );
@@ -720,11 +1187,5 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
   }
 }

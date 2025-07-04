@@ -8,6 +8,7 @@ import 'screens/splash_screen.dart';
 import 'screens/tracker_screen.dart';
 import 'screens/chat_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -28,6 +29,23 @@ Future<void> main() async {
   } else {
     debugPrint('Firebase already initialized.');
     firebaseInitialized = true;
+  }
+
+  // Initialize Firestore Emulator for physical device
+  if (firebaseInitialized) {
+    try {
+      FirebaseFirestore.instance.useFirestoreEmulator('10.42.0.21', 8081);
+      FirebaseFirestore.instance.settings = const Settings(
+        host: '10.42.0.21:8081',
+        sslEnabled: false,
+        persistenceEnabled: false,
+      );
+      debugPrint('Firestore emulator configured for 10.42.0.21:8081');
+      // Test Firestore connection
+      await testFirestore();
+    } catch (e, stackTrace) {
+      debugPrint('Firestore emulator configuration error: $e\n$stackTrace');
+    }
   }
 
   // Initialize DotEnv
@@ -55,6 +73,17 @@ Future<void> main() async {
       ),
     ),
   );
+}
+
+// Test Firestore connection
+Future<void> testFirestore() async {
+  var db = FirebaseFirestore.instance;
+  try {
+    await db.collection('test').doc('testDoc').set({'test': 'value'});
+    debugPrint('Firestore write successful');
+  } catch (e, stackTrace) {
+    debugPrint('Firestore error: $e\n$stackTrace');
+  }
 }
 
 class MyApp extends StatelessWidget {

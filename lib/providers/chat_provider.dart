@@ -35,13 +35,6 @@ class ChatProvider with ChangeNotifier {
     try {
       debugPrint('Starting ChatProvider initialization');
       _deviceId = await getDeviceId();
-      if (_firebaseInitialized) {
-        _firestore.settings = const Settings(
-          host: 'localhost:8080',
-          sslEnabled: false,
-          persistenceEnabled: false,
-        );
-      }
       if (_dotEnvInitialized) {
         _llmService = LlmService();
       } else {

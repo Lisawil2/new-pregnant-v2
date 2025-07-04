@@ -141,6 +141,8 @@ class PregnancyData {
     "Pumpkin", // Week 40
   ];
 
+  get title => null;
+
   static PregnancyData getDataForWeek(int week) {
     week = week.clamp(1, 40);
     return PregnancyData(
