@@ -40,8 +40,8 @@ class Reminder {
         id: id,
         title: json['title'] ?? '',
         description: json['description'] ?? '',
-        dateTime: (json['dateTime'] as Timestamp?)?.toDate().toLocal() ?? DateTime.now(),
-        createdAt: (json['createdAt'] as Timestamp?)?.toDate().toLocal() ?? DateTime.now(),
+        dateTime: (json['dateTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       );
 }
 
@@ -188,29 +188,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     final now = DateTime.now();
-    debugPrint('Current device time: $now');
-    debugPrint('Reminder scheduled for: ${reminder.dateTime}');
-    debugPrint('Device timezone: "+${DateTime.now().timeZoneOffset}"');
-    debugPrint('tz.local: ${tz.local}');
-    final localDateTime = reminder.dateTime.toLocal();
-    final tzDateTime = tz.TZDateTime.from(localDateTime, tz.local);
-    debugPrint('tzDateTime (local): $tzDateTime');
-    debugPrint('tzDateTime (UTC): ${tzDateTime.toUtc()}');
-    debugPrint('Seconds until scheduled: ${tzDateTime.difference(DateTime.now()).inSeconds}');
-
     if (reminder.dateTime.isBefore(now)) {
-      debugPrint('Cannot schedule notification for past time: ${reminder.dateTime}');
+      debugPrint('Cannot schedule notification for past time: ${reminder.dateTime}');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot schedule reminder for a past date')),
       );
       return;
-    }
-
-    // For debugging: if the reminder is within 2 minutes, show instantly
-    if (reminder.dateTime.difference(now).inSeconds <= 120) {
-      debugPrint('Reminder is within 2 minutes, showing notification instantly for debug.');
-      await _showMockNotificationNow(title: reminder.title, description: reminder.description);
-      // Continue to schedule the real notification as well
     }
 
     final notificationId = '${reminder.id}_${reminder.dateTime.millisecondsSinceEpoch}'.hashCode;
@@ -235,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
 
     try {
-      debugPrint('Scheduling notification at tzDateTime: $tzDateTime');
+      final tzDateTime = tz.TZDateTime.from(reminder.dateTime, tz.local);
       await _flutterLocalNotificationsPlugin.zonedSchedule(
         notificationId,
         reminder.title,
@@ -244,7 +227,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         platformDetails,
         androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: fln.UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: fln.DateTimeComponents.dateAndTime,
         payload: reminder.id,
+        // For iOS foreground notification presentation
+        // (if you want to show notifications while app is in foreground)
+        // presentAlert: true,
+        // presentSound: true,
       );
       debugPrint(
           'Notification scheduled for reminder: ${reminder.title} at $tzDateTime (ID: $notificationId)');
