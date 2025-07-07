@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/animation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
@@ -9,6 +8,7 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:uuid/uuid.dart';
 import 'tracker_screen.dart';
 import 'chat_screen.dart';
 import 'pregnancy_data.dart';
@@ -33,15 +33,15 @@ class Reminder {
         'title': title,
         'description': description,
         'dateTime': Timestamp.fromDate(dateTime),
-        'createdAt': Timestamp.fromDate(createdAt ?? DateTime.now()),
+        'createdAt': Timestamp.fromDate(createdAt),
       };
 
   factory Reminder.fromJson(Map<String, dynamic> json, String id) => Reminder(
         id: id,
         title: json['title'] ?? '',
         description: json['description'] ?? '',
-        dateTime: (json['dateTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        dateTime: (json['dateTime'] as Timestamp?)?.toDate().toLocal() ?? DateTime.now(),
+        createdAt: (json['createdAt'] as Timestamp?)?.toDate().toLocal() ?? DateTime.now(),
       );
 }
 
@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     tz.initializeTimeZones();
-    _firestore = FirebaseFirestore.instance; // Use global Firestore instance
+    _firestore = FirebaseFirestore.instance;
     _initializeNotifications();
     _initializeAnimation();
     _loadSavedData();
@@ -87,6 +87,338 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.repeat(reverse: true);
+  }
+
+  Future<bool> _requestNotificationPermissions() async {
+    final notificationStatus = await Permission.notification.request();
+    final exactAlarmStatus = await Permission.scheduleExactAlarm.request();
+
+    if (!notificationStatus.isGranted) {
+      debugPrint('Notification permission denied');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notification permission is required for reminders.'),
+        ),
+      );
+      return false;
+    }
+
+    if (!exactAlarmStatus.isGranted) {
+      debugPrint('Exact alarm permission denied');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Exact alarm permission is required for precise reminder timing.'),
+        ),
+      );
+      return false;
+    }
+
+    final batteryOptimizationStatus =
+        await Permission.ignoreBatteryOptimizations.request();
+    if (!batteryOptimizationStatus.isGranted) {
+      debugPrint('Battery optimization may restrict notifications');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Disable battery optimization in settings for reliable reminders.'),
+        ),
+      );
+    }
+
+    return true;
+  }
+
+  Future<void> _initializeNotifications() async {
+    const androidChannel = fln.AndroidNotificationChannel(
+      'reminder_channel',
+      'Reminders',
+      description: 'Notifications for upcoming reminders',
+      importance: fln.Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    const initializationSettingsAndroid =
+        fln.AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initializationSettingsIOS = fln.DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    const initializationSettings = fln.InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsIOS,
+    );
+
+    try {
+      await _flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              fln.AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(androidChannel);
+
+      final initialized = await _flutterLocalNotificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (details) {
+          debugPrint('Notification received: ${details.payload}');
+        },
+      );
+
+      if (initialized == null || !initialized) {
+        debugPrint('Failed to initialize notifications');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to initialize notifications')),
+        );
+      } else {
+        debugPrint('Notifications initialized successfully');
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Notification initialization error: $e\n$stackTrace');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Notification initialization error: $e')),
+      );
+    }
+  }
+
+  Future<void> _scheduleNotification(Reminder reminder) async {
+    final hasPermissions = await _requestNotificationPermissions();
+    if (!hasPermissions) {
+      debugPrint('Cannot schedule notification due to missing permissions');
+      return;
+    }
+
+    final now = DateTime.now();
+    debugPrint('Current device time: $now');
+    debugPrint('Reminder scheduled for: ${reminder.dateTime}');
+    debugPrint('Device timezone: "+${DateTime.now().timeZoneOffset}"');
+    debugPrint('tz.local: ${tz.local}');
+    final localDateTime = reminder.dateTime.toLocal();
+    final tzDateTime = tz.TZDateTime.from(localDateTime, tz.local);
+    debugPrint('tzDateTime (local): $tzDateTime');
+    debugPrint('tzDateTime (UTC): ${tzDateTime.toUtc()}');
+    debugPrint('Seconds until scheduled: ${tzDateTime.difference(DateTime.now()).inSeconds}');
+
+    if (reminder.dateTime.isBefore(now)) {
+      debugPrint('Cannot schedule notification for past time: ${reminder.dateTime}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot schedule reminder for a past date')),
+      );
+      return;
+    }
+
+    // For debugging: if the reminder is within 2 minutes, show instantly
+    if (reminder.dateTime.difference(now).inSeconds <= 120) {
+      debugPrint('Reminder is within 2 minutes, showing notification instantly for debug.');
+      await _showMockNotificationNow(title: reminder.title, description: reminder.description);
+      // Continue to schedule the real notification as well
+    }
+
+    final notificationId = '${reminder.id}_${reminder.dateTime.millisecondsSinceEpoch}'.hashCode;
+
+    final androidDetails = fln.AndroidNotificationDetails(
+      'reminder_channel',
+      'Reminders',
+      channelDescription: 'Notifications for upcoming reminders',
+      importance: fln.Importance.max,
+      priority: fln.Priority.high,
+      ticker: 'Reminder',
+      playSound: true,
+      enableVibration: true,
+    );
+    const iosDetails = fln.DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: true,
+    );
+    final platformDetails = fln.NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    try {
+      debugPrint('Scheduling notification at tzDateTime: $tzDateTime');
+      await _flutterLocalNotificationsPlugin.zonedSchedule(
+        notificationId,
+        reminder.title,
+        reminder.description,
+        tzDateTime,
+        platformDetails,
+        androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: fln.UILocalNotificationDateInterpretation.absoluteTime,
+        payload: reminder.id,
+      );
+      debugPrint(
+          'Notification scheduled for reminder: ${reminder.title} at $tzDateTime (ID: $notificationId)');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reminder notification scheduled for ${reminder.title}')),
+      );
+    } catch (e, stackTrace) {
+      debugPrint('Notification scheduling error: $e\n$stackTrace');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error scheduling reminder: $e')),
+      );
+    }
+  }
+
+  Future<void> _loadReminders() async {
+    try {
+      debugPrint('Loading reminders from Firestore for device: $_deviceId');
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(_deviceId)
+          .collection('reminders')
+          .orderBy('dateTime', descending: false)
+          .get();
+      setState(() {
+        reminders = snapshot.docs
+            .map((doc) => Reminder.fromJson(doc.data(), doc.id))
+            .toList();
+      });
+      debugPrint('Loaded ${reminders.length} reminders from Firestore');
+
+      await _flutterLocalNotificationsPlugin.cancelAll();
+      debugPrint('Cancelled all existing notifications');
+
+      for (var reminder in reminders) {
+        if (reminder.dateTime.isAfter(DateTime.now())) {
+          await _scheduleNotification(reminder);
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error loading reminders: $e\n$stackTrace');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading reminders: $e')),
+      );
+    }
+  }
+
+  Future<void> _showAddReminderDialog() async {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    DateTime selectedDateTime = DateTime.now().add(const Duration(hours: 1));
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add Reminder'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 320,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Title'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () async {
+                      final pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDateTime,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime(2030),
+                      );
+                      if (pickedDate != null) {
+                        final pickedTime = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.fromDateTime(selectedDateTime),
+                        );
+                        if (pickedTime != null) {
+                          setDialogState(() {
+                            selectedDateTime = DateTime(
+                              pickedDate.year,
+                              pickedDate.month,
+                              pickedDate.day,
+                              pickedTime.hour,
+                              pickedTime.minute,
+                            );
+                          });
+                        }
+                      }
+                    },
+                    child: const Text('Select Date & Time'),
+                  ),
+                  Text(
+                    'Selected: ${selectedDateTime.toString().substring(0, 16)}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (titleController.text.isNotEmpty &&
+                    descriptionController.text.isNotEmpty &&
+                    selectedDateTime.isAfter(DateTime.now())) {
+                  final newReminder = Reminder(
+                    id: const Uuid().v4(),
+                    title: titleController.text,
+                    description: descriptionController.text,
+                    dateTime: selectedDateTime,
+                    createdAt: DateTime.now(),
+                  );
+
+                  try {
+                    debugPrint('Attempting to save reminder to Firestore');
+                    final docRef = await _firestore
+                        .collection('users')
+                        .doc(_deviceId)
+                        .collection('reminders')
+                        .add(newReminder.toJson());
+                    debugPrint('Reminder saved to Firestore with ID: ${docRef.id}');
+
+                    setState(() {
+                      reminders.add(Reminder(
+                        id: docRef.id,
+                        title: newReminder.title,
+                        description: newReminder.description,
+                        dateTime: newReminder.dateTime,
+                        createdAt: newReminder.createdAt,
+                      ));
+                    });
+
+                    await _scheduleNotification(newReminder);
+                    // Removed the instant mock notification call for real notification only
+
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Reminder added successfully')),
+                    );
+                  } catch (e, stackTrace) {
+                    debugPrint('Error saving reminder: $e\n$stackTrace');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error saving reminder: $e')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please fill all fields and select a future date.'),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadSavedData() async {
@@ -175,7 +507,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           final pickedDate = await showDatePicker(
                             context: context,
                             initialDate: selectedLMP,
-                            firstDate: DateTime.now().subtract(const Duration(days: 300)),
+                            firstDate:
+                                DateTime.now().subtract(const Duration(days: 300)),
                             lastDate: DateTime.now(),
                             helpText: 'Select Last Menstrual Period',
                           );
@@ -239,10 +572,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                 try {
                   debugPrint('Attempting to save LMP data to Firestore');
-                  await _firestore
-                      .collection('users')
-                      .doc(_deviceId)
-                      .set({
+                  await _firestore.collection('users').doc(_deviceId).set({
                     'lmpDate': Timestamp.fromDate(selectedLMP),
                     'dueDate': Timestamp.fromDate(_dueDate!),
                     'startDate': Timestamp.fromDate(startDate),
@@ -357,241 +687,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _initializeNotifications() async {
-    const initializationSettingsAndroid =
-        fln.AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initializationSettingsIOS = fln.DarwinInitializationSettings();
-    const initializationSettings = fln.InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
-    );
-    await _flutterLocalNotificationsPlugin.initialize(initializationSettings);
-  }
-
-  Future<bool> _requestExactAlarmPermission() async {
-    final status = await Permission.scheduleExactAlarm.request();
-    return status.isGranted;
-  }
-
-  Future<void> _scheduleNotification(Reminder reminder) async {
-    bool canScheduleExact = await _requestExactAlarmPermission();
-    final androidDetails = fln.AndroidNotificationDetails(
-      'reminder_channel',
-      'Reminders',
-      channelDescription: 'Notifications for upcoming reminders',
-      importance: fln.Importance.max,
-      priority: fln.Priority.high,
-    );
-    const iosDetails = fln.DarwinNotificationDetails();
-    final platformDetails = fln.NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    try {
-      if (canScheduleExact) {
-        await _flutterLocalNotificationsPlugin.zonedSchedule(
-          reminder.id.hashCode,
-          reminder.title,
-          reminder.description,
-          tz.TZDateTime.from(reminder.dateTime, tz.local),
-          platformDetails,
-          androidScheduleMode: fln.AndroidScheduleMode.exactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation:
-              fln.UILocalNotificationDateInterpretation.absoluteTime,
-        );
-        debugPrint('Notification scheduled for reminder: ${reminder.title}');
-      } else {
-        await _flutterLocalNotificationsPlugin.show(
-          reminder.id.hashCode,
-          reminder.title,
-          'Exact timing not available: ${reminder.description}',
-          platformDetails,
-        );
-        debugPrint('Fallback notification shown for reminder: ${reminder.title}');
-      }
-    } catch (e, stackTrace) {
-      debugPrint('Notification scheduling error: $e\n$stackTrace');
-    }
-  }
-
-  Future<void> _loadReminders() async {
-    try {
-      debugPrint('Loading reminders from Firestore for device: $_deviceId');
-      final snapshot = await _firestore
-          .collection('users')
-          .doc(_deviceId)
-          .collection('reminders')
-          .orderBy('dateTime', descending: false)
-          .get();
-      setState(() {
-        reminders = snapshot.docs
-            .map((doc) => Reminder.fromJson(doc.data(), doc.id))
-            .toList();
-      });
-      debugPrint('Loaded ${reminders.length} reminders from Firestore');
-
-      final storedReminders = _prefs.getStringList('reminders') ?? [];
-      if (reminders.isEmpty && storedReminders.isNotEmpty) {
-        setState(() {
-          reminders = storedReminders.map((r) {
-            final parts = r.split('|');
-            return Reminder(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              title: parts[0],
-              description: parts[1],
-              dateTime: DateTime.parse(parts[2]),
-              createdAt: DateTime.now(),
-            );
-          }).toList();
-        });
-        debugPrint('Loaded ${reminders.length} reminders from SharedPreferences');
-      }
-
-      for (var reminder in reminders) {
-        await _scheduleNotification(reminder);
-      }
-    } catch (e, stackTrace) {
-      debugPrint('Error loading reminders: $e\n$stackTrace');
-    }
-  }
-
-  Future<void> _showAddReminderDialog() async {
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
-    DateTime selectedDateTime = DateTime.now().add(const Duration(hours: 1));
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Reminder'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 250,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: 'Title'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: descriptionController,
-                    decoration: const InputDecoration(labelText: 'Description'),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () async {
-                      final pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDateTime,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime(2030),
-                      );
-                      if (pickedDate != null) {
-                        final pickedTime = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.fromDateTime(selectedDateTime),
-                        );
-                        if (pickedTime != null) {
-                          setDialogState(() {
-                            selectedDateTime = DateTime(
-                              pickedDate.year,
-                              pickedDate.month,
-                              pickedDate.day,
-                              pickedTime.hour,
-                              pickedTime.minute,
-                            );
-                          });
-                        }
-                      }
-                    },
-                    child: const Text('Select Date & Time'),
-                  ),
-                  Text(
-                    'Selected: ${selectedDateTime.toString().substring(0, 16)}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                if (titleController.text.isNotEmpty &&
-                    descriptionController.text.isNotEmpty &&
-                    selectedDateTime.isAfter(DateTime.now())) {
-                  final newReminder = Reminder(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    title: titleController.text,
-                    description: descriptionController.text,
-                    dateTime: selectedDateTime,
-                    createdAt: DateTime.now(),
-                  );
-
-                  try {
-                    debugPrint('Attempting to save reminder to Firestore');
-                    final docRef = await _firestore
-                        .collection('users')
-                        .doc(_deviceId)
-                        .collection('reminders')
-                        .add(newReminder.toJson());
-                    debugPrint('Reminder saved to Firestore with ID: ${docRef.id}');
-
-                    setState(() {
-                      reminders.add(Reminder(
-                        id: docRef.id,
-                        title: newReminder.title,
-                        description: newReminder.description,
-                        dateTime: newReminder.dateTime,
-                        createdAt: newReminder.createdAt,
-                      ));
-                    });
-
-                    final storedReminders = _prefs.getStringList('reminders') ?? [];
-                    storedReminders.add(
-                      '${newReminder.title}|${newReminder.description}|${newReminder.dateTime.toIso8601String()}',
-                    );
-                    await _prefs.setStringList('reminders', storedReminders);
-                    debugPrint('Reminder saved to SharedPreferences');
-
-                    await _scheduleNotification(newReminder);
-                    debugPrint('Notification scheduled for reminder: ${newReminder.title}');
-
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Reminder added successfully')),
-                    );
-                  } catch (e, stackTrace) {
-                    debugPrint('Error saving reminder: $e\n$stackTrace');
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error saving reminder: $e')),
-                    );
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please fill all fields and select a future date.'),
-                    ),
-                  );
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _handleTabSelection(int index) {
     if (index == 1 && !_hasSetLMP) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -613,7 +708,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   List<Widget> get _screens => [
         _buildMainHomeTab(),
-        _hasSetLMP ? TrackerScreen(initialWeek: _currentWeek) : _buildLMPRequiredScreen(),
+        _hasSetLMP
+            ? TrackerScreen(initialWeek: _currentWeek)
+            : _buildLMPRequiredScreen(),
         const ChatScreen(),
       ];
 
@@ -717,8 +814,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           if (_showHints && _hasSetLMP) _buildHintOverlay(),
         ],
       ),
-      floatingActionButton: _selectedIndex == 0 && _hasSetLMP
-          ? Tooltip(
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (_selectedIndex == 0 && _hasSetLMP)
+            Tooltip(
               message: 'Add a new reminder for appointments or tasks',
               decoration: BoxDecoration(
                 color: Colors.pink.shade400,
@@ -738,10 +838,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   onPressed: _showAddReminderDialog,
                   backgroundColor: Colors.pink.shade400,
                   child: const Icon(Icons.add, color: Colors.white),
+                  heroTag: 'addReminder',
                 ),
               ),
-            )
-          : null,
+            ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         selectedItemColor: Colors.pink,
@@ -1151,24 +1253,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () async {
                             try {
-                              debugPrint('Attempting to delete reminder: ${reminder.id}');
                               await _firestore
                                   .collection('users')
                                   .doc(_deviceId)
                                   .collection('reminders')
                                   .doc(reminder.id)
                                   .delete();
-                              debugPrint('Reminder deleted from Firestore');
-
-                              final storedReminders = _prefs.getStringList('reminders') ?? [];
-                              storedReminders.removeWhere((r) =>
-                                  r.startsWith('${reminder.title}|${reminder.description}|'));
-                              await _prefs.setStringList('reminders', storedReminders);
-                              debugPrint('Reminder deleted from SharedPreferences');
-
-                              await _flutterLocalNotificationsPlugin.cancel(reminder.id.hashCode);
-                              debugPrint('Notification cancelled for reminder: ${reminder.title}');
-
+                              await _flutterLocalNotificationsPlugin
+                                  .cancel('${reminder.id}_${reminder.dateTime.millisecondsSinceEpoch}'.hashCode);
                               setState(() {
                                 reminders.remove(reminder);
                               });
@@ -1187,5 +1279,51 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ],
       ),
     );
+  }
+
+  // Add a mock notification method for instant notification (does not save to Firestore or reminders list)
+  Future<void> _showMockNotificationNow({String? title, String? description}) async {
+    final androidDetails = fln.AndroidNotificationDetails(
+      'reminder_channel',
+      'Reminders',
+      channelDescription: 'Notifications for upcoming reminders',
+      importance: fln.Importance.max,
+      priority: fln.Priority.high,
+      ticker: 'Reminder',
+      playSound: true,
+      enableVibration: true,
+    );
+    const iosDetails = fln.DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: true,
+    );
+    final platformDetails = fln.NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+    try {
+      await _flutterLocalNotificationsPlugin.show(
+        99999, // Unique test ID
+        title ?? 'Reminder',
+        description ?? 'This is a reminder notification.',
+        platformDetails,
+        payload: 'test_reminder',
+      );
+      debugPrint('Mock notification shown immediately.');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mock notification triggered!')),
+      );
+    } catch (e, stackTrace) {
+      debugPrint('Error showing mock notification: $e\n$stackTrace');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error showing mock notification: $e')),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 }
